@@ -1,4 +1,6 @@
-from flask import Flask, session, redirect, request
+import os
+
+from flask import Flask, session, redirect, request, render_template, url_for
 from flask_session import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -7,15 +9,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
-DATABASE_URL = "postgres://vraflmfjiprudl:35133ceeb18809cfd81c661d26d7ac39ce8c2674eb14e69a4550c9384366630c@ec2-3-208-50-226.compute-1.amazonaws.com:5432/d9fj78f13oje2m"
-
 # Configure session
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 # Set up database
-engine = create_engine(DATABASE_URL) # Heroku URI 
+engine = create_engine('postgres://vraflmfjiprudl:35133ceeb18809cfd81c661d26d7ac39ce8c2674eb14e69a4550c9384366630c@ec2-3-208-50-226.compute-1.amazonaws.com:5432/d9fj78f13oje2m') # Heroku URI 
 database = scoped_session(sessionmaker(bind=engine))
 db = database()
 
@@ -30,7 +30,7 @@ def login_required(f):
 
 
 # Login Page
-@app.route('/login', method=["GET", "POST"])
+@app.route('/login', methods=["GET", "POST"])
 def login():
     session.clear()
 
@@ -58,11 +58,11 @@ def login():
 
     # GET
     else:
-        return "LOGIN PAGE"
+        return render_template("login.html")
 
 
 # Register Page
-@app.route('/register', method=["GET","POST"])
+@app.route('/register', methods=["GET","POST"])
 def register():
     session.clear()
 
@@ -107,7 +107,7 @@ def register():
 
     # GET
     else:
-        return "REGISTER PAGE"
+        return render_template("register.html")
         
 
 # Logout
@@ -118,7 +118,6 @@ def logout():
 
 
 # Homepage:
-# List of all courses
 @app.route('/')
 @login_required
 def index():
@@ -127,12 +126,9 @@ def index():
     rows = db.execute("SELECT * FROM courses").fetchall()
     
     for row in rows:
-        ratings = db.execute("SELECT AVG(rating) FROM reviews WHERE course_id=:course", {'course':row['id']}).fetchone()
-        rating = round(float(ratings[0]),2)
-        courses.append([row['course_name'], row['course_web'], rating])
-    return {
-        'courses': courses # LIST: [course name, course web, average rating]
-    }
+        courses.append([row['id'], row['course_name'], row['description']])
+
+    return render_template("index.html", courses=courses)
 
 
 # Course Page (Review and Rating of a course)
@@ -141,7 +137,7 @@ def index():
 def course(course_id):
     # POST
     if request.method == "POST":
-
+        
         # Check if review filled
         if not request.form.get('review'):
             return "ERROR"
@@ -154,11 +150,11 @@ def course(course_id):
 
         # Check if user have multiple submission
         rows = db.execute("SELECT * FROM reviews WHERE course_id=:course AND user_id=:user", \
-            {'course':course_id, 'user':session['user_id']}).fetchall()
-        
-        if rows is None:
+            {'course':course_id, 'user':session['user_id'][0]}).fetchall()
+        print(rows)
+        if len(rows) == 0:
             db.execute("INSERT INTO reviews (course_id,user_id,review,rating) VALUES (:course, :user, :review, :rating)", \
-                {'course':course_id, 'user':session['user_id'], 'review':review, 'rating':rating})
+                {'course':course_id, 'user':session['user_id'][0], 'review':review, 'rating':rating})
             db.commit()
 
             link = "/course/" + course_id
@@ -169,42 +165,44 @@ def course(course_id):
 
     #GET
     else:
+        courses = db.execute("SELECT * FROM courses").fetchall()
+
         # Query course from course database
         course = db.execute("SELECT * FROM courses WHERE id=:course", \
-            {'course':course_id}).fetchone()
+            {'course':course_id}).fetchall()
         
         if course is None:
             return "ERROR"
 
         rows = db.execute("SELECT * FROM reviews WHERE course_id=:course", \
             {'course':course_id}).fetchall()
-
-        if rows is None:
-            return {
-                'course':course[0]['course_name'], 
-                'web':course[0]['course_web'],
-                'reviews':None,
-                'ratings':None
-            }
+        
+        if len(rows) == 0:
+            return render_template("course.html", 
+                courses=courses, 
+                name=course[0]['course_name'],
+                web=course[0]['course_web'],
+                desc=course[0]['description'],
+                check=False)
 
         else:
             reviews = []
-            ratings = 0
 
             for row in rows:
                 userid = row['user_id']
                 username = db.execute("SELECT username FROM users WHERE id=:user", {'user':userid}).fetchone()
                 reviews.append([username['username'], row['review'], row['rating']])
-                ratings += int(row['rating'])
-            
-            ratings = ratings/len(reviews)
 
-            return {
-                'course':course[0]['course_name'],
-                'web':course[0]['course_web'],
-                'reviews':reviews, # LIST: [username, review, rating]
-                'ratings':ratings # Average Rating
-            }
+            rating = db.execute("SELECT AVG(rating) FROM reviews WHERE course_id=:course", {'course':course_id}).fetchone()
+
+            return render_template("course.html",
+                courses=courses,
+                name=course[0]['course_name'],
+                web=course[0]['course_web'],
+                desc=course[0]['description'],
+                check=True,
+                reviews=reviews,
+                rating=round(rating['avg'],2))
 
 
 # Search Function (Returns Search Results)
