@@ -7,13 +7,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
+DATABASE_URL = "postgres://vraflmfjiprudl:35133ceeb18809cfd81c661d26d7ac39ce8c2674eb14e69a4550c9384366630c@ec2-3-208-50-226.compute-1.amazonaws.com:5432/d9fj78f13oje2m"
+
 # Configure session
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 # Set up database
-engine = create_engine("DATABASE_URL") # Heroku URI 
+engine = create_engine(DATABASE_URL) # Heroku URI 
 database = scoped_session(sessionmaker(bind=engine))
 db = database()
 
@@ -26,10 +28,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Homepage
-@app.route('/')
-def index():
-    raise NotImplementedError
 
 # Login Page
 @app.route('/login', method=["GET", "POST"])
@@ -119,6 +117,94 @@ def logout():
     return redirect("/")
 
 
+# Homepage:
+# List of all courses
+@app.route('/')
+@login_required
+def index():
+    courses = []
+
+    rows = db.execute("SELECT * FROM courses").fetchall()
+    
+    for row in rows:
+        ratings = db.execute("SELECT AVG(rating) FROM reviews WHERE course_id=:course", {'course':row['id']}).fetchone()
+        ratings = round(float(ratings),2)
+        courses.append([row['course_name'], row['course_web'], ratings])
+    return {
+        'courses': courses # LIST: [course name, course web, average rating]
+    }
+
+
+# Course Page (Review and Rating of a course)
+@app.route("/course/<course_id>", methods=["GET", "POST"])
+@login_required
+def course(course_id):
+    # POST
+    if request.method == "POST":
+
+        # Check if review filled
+        if not request.form.get('review'):
+            return "ERROR"
+        # Check if rating filled
+        elif not request.form.get('rating'):
+            return "ERROR"
+        
+        review = request.form.get('review')
+        rating = int(request.form.get('rating'))
+
+        # Check if user have multiple submission
+        rows = db.execute("SELECT * FROM reviews WHERE course_id=:course AND user_id=:user", \
+            {'course':course_id, 'user':session['user_id']}).fetchall()
+        
+        if rows is None:
+            db.execute("INSERT INTO reviews (course_id,user_id,review,rating) VALUES (:course, :user, :review, :rating)", \
+                {'course':course_id, 'user':session['user_id'], 'review':review, 'rating':rating})
+            db.commit()
+
+            link = "/course/" + course_id
+            return redirect(link)
+    
+        else:
+            return "ERROR"
+
+    #GET
+    else:
+        # Query course from course database
+        course = db.execute("SELECT * FROM courses WHERE id=:course", \
+            {'course':course_id}).fetchone()
+        
+        if course is None:
+            return "ERROR"
+
+        rows = db.execute("SELECT * FROM reviews WHERE course_id=:course", \
+            {'course':course_id}).fetchall()
+
+        if rows is None:
+            return {
+                'course':course[0]['course_name'], 
+                'web':course[0]['course_web'],
+                'reviews':None,
+                'ratings':None
+            }
+
+        else:
+            reviews = []
+            ratings = 0
+
+            for row in rows:
+                userid = row['user_id']
+                username = db.execute("SELECT username FROM users WHERE id=:user", {'user':userid}).fetchone()
+                reviews.append([username['username'], row['review'], row['rating']])
+                ratings += int(row['rating'])
+            
+            ratings = ratings/len(reviews)
+
+            return {
+                'course':course[0]['course_name'],
+                'web':course[0]['course_web'],
+                'reviews':reviews, # LIST: [username, review, rating]
+                'ratings':ratings # Average Rating
+            }
 
 
 if __name__ == '__main__':
