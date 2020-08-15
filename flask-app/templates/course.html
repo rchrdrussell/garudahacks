@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+
+{% block main %}
+  <main id="main">
+
+    <section class="inner-page">
+      <div class="container">
+        <div class="col-9"></div>
+        <br>
+        <h1><b>{{ name }}</b></h1>
+        <h5><a href="{{ web }}">{{ web }}</a></h5>
+        <p>
+          {{ desc }}
+        </p>
+      </div>
+
+      <div class="container">
+        
+        <h3>Reviews From Users:</h3>
+        {% if not check %}
+          <div class="row">
+            <p>No one has written a review yet. Be the first one!</p>
+          </div>
+        {% else %}
+          <div class="row">
+            <h3>Rating: <b>{{rating}}</b></h3>
+          </div>
+          <div class="row">
+            <table class="table thead-light">
+              <tr>
+                  <th>Username</th>
+                  <th>Rating</th>
+                  <th colspan="2">Review</th>
+              </tr>
+              {% for review in reviews %}
+                    <tr>
+                        <td>{{ review[0] }}</td>
+                        <td>{{ review[2] }}</td>
+                        <td>{{ review[1] }}</td>
+                    </tr>
+              {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="row">
+        <h3>Write a Review!</h3>
+    </div>
+    <div class="row">
+        <div class="col-lg">
+            <form method="POST" class="form-border">
+                <div class="form-group">
+                    <textarea name="review" class="form-control" id="review" rows=2 placeholder="Write a review!" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="rating">Rating:</label>
+                    <select class="form-control" id="rating" name="rating">
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="3">3</option>
+                        <option value="2">2</option>
+                        <option value="1">1</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Submit Review</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    </section>
+
+  </main><!-- End #main -->
+
+{% endblock %}
