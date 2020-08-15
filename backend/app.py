@@ -128,8 +128,8 @@ def index():
     
     for row in rows:
         ratings = db.execute("SELECT AVG(rating) FROM reviews WHERE course_id=:course", {'course':row['id']}).fetchone()
-        ratings = round(float(ratings),2)
-        courses.append([row['course_name'], row['course_web'], ratings])
+        rating = round(float(ratings[0]),2)
+        courses.append([row['course_name'], row['course_web'], rating])
     return {
         'courses': courses # LIST: [course name, course web, average rating]
     }
@@ -206,6 +206,27 @@ def course(course_id):
                 'ratings':ratings # Average Rating
             }
 
+
+# Search Function (Returns Search Results)
+@app.route("/search")
+@login_required
+def search():
+    search = request.form.get('search') # Form name search
+    search = "%" + search + "%"
+
+    rows = db.execute("SELECT * FROM courses WHERE course_name LIKE :search OR course_web LIKE :search", \
+        {'search':search}).fetchall()
+    
+    results = []
+
+    for row in rows:
+        ratings = db.execute("SELECT AVG(rating) FROM reviews WHERE course_id=:course", {'course':row['id']}).fetchone()
+        rating = round(float(ratings[0]),2)
+        results.append([row['course_name'], row['course_web'], rating])
+
+    return {
+        'results':results # LIST: [name, web, rating]
+    }
 
 if __name__ == '__main__':
     app.run(debug=True)
